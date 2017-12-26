@@ -1,0 +1,12 @@
+
+启动蓝牙：
+bt_enable
+
+
+交互式：
+1、gatttool -b 02:4F:08:E9:7C:C0 -I
+2、connect
+3、char-write-cmd 0x000f 0100
+
+非交互式：
+gatttool -b 02:4F:08:E9:7C:C0 --char-write-req -a 0x000f -n 0100 --listen
