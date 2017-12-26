@@ -463,6 +463,9 @@ int main()
         //保存当前的时间戳
         time_t time_now;
 
+        //文件指针对象
+        FILE *fpRead = NULL;
+
         while(1) {
                 printf("我是主进程，正在执行蓝牙连接任务...\n");
 
@@ -503,8 +506,8 @@ int main()
 
                                                 memset(fileName, 0, 60);
                                                 sprintf(fileName, "/tmp/willen/connected/%s", btData);
-                                                printf("### %s\n", fileName);
-                                                FILE *fpRead=fopen(fileName,"r");
+                                                //printf("### %s\n", fileName);
+                                                fpRead=fopen(fileName,"r");
                                                 if(fpRead != NULL)
                                                 {
                                                         int pid=0;
@@ -541,8 +544,8 @@ int main()
 
                                 memset(fileName, 0, 60);
                                 sprintf(fileName, "/tmp/willen/connected/%s", btData);
-                                printf("### %s\n", fileName);
-                                FILE *fpRead=fopen(fileName, "r");
+                                //printf("### %s\n", fileName);
+                                fpRead=fopen(fileName, "r");
                                 if(fpRead != NULL)
                                 {
                                         int pid=0;
@@ -577,6 +580,8 @@ int main()
         free(shell);
         free(fileName);
         free(tmp);
+
+        fclose(fpRead);
 
         return 0;
 }
