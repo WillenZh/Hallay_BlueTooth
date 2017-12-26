@@ -350,7 +350,7 @@ int readFileList(char *basePath, char *filesList)
         i++;
     }
 
-    closedir(dir);
+    //closedir(dir);
     
     if(i==0) {
     	return 1;
