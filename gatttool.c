@@ -51,7 +51,7 @@
 #include <dirent.h>
 
 #define MY_HTTP_DEFAULT_PORT 80
-#define MY_HTTP_DEFAULT_URL "http://%s/INurse/device/infusionAlert.alensic?mac_addr=%s&data=%02x&name=Kfree"
+#define MY_HTTP_DEFAULT_URL "http://%s/INurseLite/device/infusionAlert.alensic?mac_addr=%s&data=%02x&name=Kfree"
 
 //保存服务器接口地址的信息
 char *serverData = NULL;

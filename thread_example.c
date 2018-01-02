@@ -118,7 +118,8 @@ int get_local_ip(const char *eth_inf, char *ip)
     return 0;
 }
 
-pthread_t thread[2]; 
+pthread_t thread[2];
+pthread_t bt_thread[5]; 
 pthread_mutex_t mut; 
 int share_resource=0;
 
@@ -430,25 +431,26 @@ int readFileList(char *basePath, char *filesList)
     }
 }
 
-int main() 
+void thread_wait(void)
 {
-        /*用默认属性初始化互斥锁*/ 
-        pthread_mutex_init(&mut,NULL);
-        printf("我是主函数，我正在创建线程\n");
+        /*等待线程结束*/
+        if(thread[0] !=0) {
+                pthread_join(thread[0],NULL);
+                printf("线程1已经结束\n");
+        }
 
-        thread_create();
-        
-        //开启蓝牙功能
-        printf("我是主进程，正在开启蓝牙功能：\n");
-        system("rm -rf /var/run/messagebus.pid");
-        int result = system("bt_enable");
-        printf("我是主进程，开启蓝牙完成:%d\n", result);
-        system("rm -rf /tmp/willen/connected/*");
-        sleep(3);
+        if(thread[1] !=0) {
+                pthread_join(thread[1],NULL);
+                printf("线程2已经结束\n");
+        }
+}
 
+void *thread3(void *arg)
+{
         //保存蓝牙设备的配置信息
-        char *btData = malloc(50);
-        
+        char btData[30] = "\0";
+        strcpy(btData, (char *)arg);
+
         //保存蓝牙连接命令
         char *shell = malloc(100);
 
@@ -467,121 +469,169 @@ int main()
         FILE *fpRead = NULL;
 
         while(1) {
-                printf("我是主进程，正在执行蓝牙连接任务...\n");
 
-                memset(btData, 0, 50);
                 memset(shell, 0, 100);
+                sprintf(shell, BT_SHELL, btData);
 
-                //读取蓝牙配置的信息
-                if( readFileList("/tmp/willen/bluetooth", btData) == 0 ) {
+                printf("[%s]\n", shell);
+                printf("我是子进程，正在连接蓝牙%s：%d\n", btData, system(shell));
+                sleep(12);
 
-                        //读取信息成功
-                        sprintf(shell, BT_SHELL, btData);
-                        printf("正在连接蓝牙%s：%d\n", btData, system(shell));
-                        sleep(12);
+                memset(fileName, 0, 60);
+                sprintf(fileName, "/tmp/willen/connected/%s", btData);
 
-                        memset(fileName, 0, 60);
-                        sprintf(fileName, "/tmp/willen/connected/%s", btData);
+                //判断连接是否成功
+                if(existFile("/tmp/willen/connected", btData) == 0) {
+                        //蓝牙连接成功
 
-                        //判断连接是否成功
-                        if(existFile("/tmp/willen/connected", btData) == 0) {
-                                //蓝牙连接成功
+                        //循环监听蓝牙是否断开连接
+                        while(1) {
+                                printf("正在监听蓝牙是否断开连接...\n");
+                                
+                                stat(fileName, &fileStatus);
+                                time(&time_now);
 
-                                //循环监听蓝牙是否断开连接
-                                while(1) {
-                                        printf("正在监听蓝牙是否断开连接...\n");
+                                //printf("%s modify time: %d, now: %d\n", fileName, fileStatus.st_mtime, time_now);
+                                //判断是否超时15s
+                                if((time_now - fileStatus.st_mtime) >= 15) {
+                                        //读取数据超时，设备已经断开
                                         
-                                        stat(fileName, &fileStatus);
-                                        time(&time_now);
-
-                                        //printf("%s modify time: %d, now: %d\n", fileName, fileStatus.st_mtime, time_now);
-                                        //判断是否超时15s
-                                        if((time_now - fileStatus.st_mtime) >= 15) {
-                                                //读取数据超时，设备已经断开
-                                                
-                                                //TODO 杀死蓝牙连接的相关进程
-                                                memset(tmp, 0, 50);
-                                                sprintf(tmp, "ps | grep %s > %s", btData, fileName);
-                                                system(tmp);
-
-                                                memset(fileName, 0, 60);
-                                                sprintf(fileName, "/tmp/willen/connected/%s", btData);
-                                                //printf("### %s\n", fileName);
-                                                fpRead=fopen(fileName,"r");
-                                                if(fpRead != NULL)
-                                                {
-                                                        int pid=0;
-                                                        fscanf(fpRead,"%d ",&pid);
-                                                        printf("当前进程的PID：%d\n",pid);
-                                                        //fclose(fpRead);
-
-                                                        //杀死当前的进程
-                                                        memset(tmp, 0, 50);
-                                                        sprintf(tmp, "kill 9 %d", pid);
-                                                        printf("结束当前的蓝牙进程: %d\n", system(tmp));
-
-                                                } else {
-                                                        perror("Error");
-                                                }
-
-                                                //删除相关文件
-                                                memset(tmp, 0, 50);
-                                                sprintf(tmp, "rm -rf %s", fileName);
-                                                printf("%s设备已经断开: %d\n", btData, system(tmp));
-
-                                                break;
-                                        }
-                                        sleep(6);
-                                }
-
-                        } else {
-                                printf("蓝牙连接失败!\n");
-
-                                //TODO 杀死蓝牙连接的相关进程
-                                memset(tmp, 0, 50);
-                                sprintf(tmp, "ps | grep %s > %s", btData, fileName);
-                                system(tmp);
-
-                                memset(fileName, 0, 60);
-                                sprintf(fileName, "/tmp/willen/connected/%s", btData);
-                                //printf("### %s\n", fileName);
-                                fpRead=fopen(fileName, "r");
-                                if(fpRead != NULL)
-                                {
-                                        int pid=0;
-                                        fscanf(fpRead,"%d ",&pid);
-                                        printf("当前进程的PID：%d\n",pid);
-                                        //fclose(fpRead);
-
-                                        //杀死当前的进程
+                                        //TODO 杀死蓝牙连接的相关进程
                                         memset(tmp, 0, 50);
-                                        sprintf(tmp, "kill 9 %d", pid);
-                                        printf("结束当前的蓝牙进程: %d\n", system(tmp));
+                                        sprintf(tmp, "ps | grep %s > %s", btData, fileName);
+                                        system(tmp);
 
-                                } else {
-                                        perror("Error");
+                                        memset(fileName, 0, 60);
+                                        sprintf(fileName, "/tmp/willen/connected/%s", btData);
+                                        //printf("### %s\n", fileName);
+                                        fpRead=fopen(fileName,"r");
+                                        if(fpRead != NULL)
+                                        {
+                                                int pid=0;
+                                                fscanf(fpRead,"%d ",&pid);
+                                                printf("当前进程的PID：%d\n",pid);
+                                                //fclose(fpRead);
+
+                                                //杀死当前的进程
+                                                memset(tmp, 0, 50);
+                                                sprintf(tmp, "kill 9 %d", pid);
+                                                printf("结束当前的蓝牙进程: %d\n", system(tmp));
+
+                                        } else {
+                                                perror("Error");
+                                        }
+
+                                        //删除相关文件
+                                        memset(tmp, 0, 50);
+                                        sprintf(tmp, "rm -rf %s", fileName);
+                                        printf("%s设备已经断开: %d\n", btData, system(tmp));
+
+                                        break;
                                 }
-
-                                //删除相关文件
-                                memset(tmp, 0, 50);
-                                sprintf(tmp, "rm -rf %s", fileName);
-                                printf("%s设备已经断开: %d\n", btData, system(tmp));
-
+                                sleep(6);
                         }
 
                 } else {
-                        printf("尚未配置蓝牙设备的信息!\n");
+                        printf("蓝牙连接失败!\n");
+
+                        //TODO 杀死蓝牙连接的相关进程
+                        memset(tmp, 0, 50);
+                        sprintf(tmp, "ps | grep %s > %s", btData, fileName);
+                        system(tmp);
+
+                        memset(fileName, 0, 60);
+                        sprintf(fileName, "/tmp/willen/connected/%s", btData);
+                        //printf("### %s\n", fileName);
+                        fpRead=fopen(fileName, "r");
+                        if(fpRead != NULL)
+                        {
+                                int pid=0;
+                                fscanf(fpRead,"%d ",&pid);
+                                printf("当前进程的PID：%d\n",pid);
+                                //fclose(fpRead);
+
+                                //杀死当前的进程
+                                memset(tmp, 0, 50);
+                                sprintf(tmp, "kill 9 %d", pid);
+                                printf("结束当前的蓝牙进程: %d\n", system(tmp));
+
+                        } else {
+                                perror("Error");
+                        }
+
+                        //删除相关文件
+                        memset(tmp, 0, 50);
+                        sprintf(tmp, "rm -rf %s", fileName);
+                        printf("%s设备已经断开: %d\n", btData, system(tmp));
+
                 }
 
                 sleep(6);
         }
 
-        free(btData);
         free(shell);
         free(fileName);
         free(tmp);
 
         fclose(fpRead);
+        pthread_exit(NULL);
+}
+
+int main() 
+{
+        /*用默认属性初始化互斥锁*/ 
+        pthread_mutex_init(&mut,NULL);
+        printf("我是主函数，我正在创建线程\n");
+
+        thread_create();
+        
+        //开启蓝牙功能
+        printf("我是主进程，正在开启蓝牙功能：\n");
+        system("rm -rf /var/run/messagebus.pid");
+        int result = system("bt_enable");
+        printf("我是主进程，开启蓝牙完成:%d\n", result);
+        system("rm -rf /tmp/willen/connected/*");
+        sleep(3);
+
+        //保存蓝牙设备的配置信息
+        char *btData = malloc(100);
+        memset(btData, 0, 100);
+
+        //读取蓝牙配置的信息
+        if( readFileList("/tmp/willen/bluetooth", btData) == 0 ) {
+                
+                int num = 0;
+                int temp;
+                char *device = strtok(btData, "#");
+                //创建子线程去连接蓝牙设备
+                if((temp = pthread_create(&bt_thread[num++], NULL, thread3, device)) != 0)
+                        printf("蓝牙子线程创建失败![%s]\n", device);
+                else
+                        printf("蓝牙子线程创建成功[%s]\n", device);
+                
+                //判断是否还有设备需要连接
+                while((device = strtok(NULL, "#"))) {
+                        //继续创建子线程去连接蓝牙设备
+                        if((temp = pthread_create(&bt_thread[num++], NULL, thread3, device)) != 0)
+                                printf("蓝牙子线程创建失败![%s]\n", device);
+                        else
+                                printf("蓝牙子线程创建成功[%s]\n", device);
+
+                        if(num == 5) {
+                                //最多只可以连接五个设备
+                                printf("最多只可以连接五个设备\n");
+                                break;
+                        }
+                }
+
+        } else {
+                printf("尚未配置蓝牙设备的信息!\n");
+        }
+
+        printf("我是主线程，正在等待子线程完成任务\n");
+
+        thread_wait();
+        free(btData);
 
         return 0;
 }
