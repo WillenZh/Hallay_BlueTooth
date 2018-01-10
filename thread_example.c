@@ -191,6 +191,101 @@ void *thread1()
         pthread_exit(NULL); 
 }
 
+//处理TCP消息
+char *handleMessage(char *buf) {
+
+        int result = -1;
+        char *returnMsg = NULL;
+        char *p = NULL;
+
+        if(buf[0] != '[') {
+                returnMsg = "errorValue";
+                return returnMsg;
+        }
+        buf++;
+
+        //判断是否是心跳数据
+        if (strcmp(buf, "connected") == 0) {
+                printf( "心跳数据\n" );
+                returnMsg = "connected";
+
+        } else if (is_begin_with(buf, "bluetooth") == 1) {
+                //判断是否是蓝牙配置信息
+                printf( "蓝牙配置数据：%s\n", buf );
+
+                strtok(buf, "@");
+                p = strtok(NULL, "@");
+
+                if ( p ) {
+                        char shell[50] = "touch /tmp/willen/bluetooth/";
+                        strcat(shell, p);
+                        system("rm -rf /tmp/willen/bluetooth/*");
+                        result = system(shell);
+                        printf("%s:%d\n", shell, result); 
+
+                } else {
+                        result = -1;
+                        printf("蓝牙配置格式错误\n");
+                }
+
+        } else if (is_begin_with(buf, "server") == 1) {
+                //判断是否是服务器接口信息
+                printf( "服务器接口数据：%s\n", buf );
+
+                strtok(buf, "@");
+                p = strtok(NULL, "@");
+
+                if ( p ) {
+                        char shell[50] = "touch /tmp/willen/server/";
+                        strcat(shell, p);
+                        system("rm -rf /tmp/willen/server/*");
+                        result = system(shell);
+                        printf("%s:%d\n", shell, result);
+
+                } else {
+                        result = -1;
+                        printf("服务器配置格式错误\n");
+                }
+
+        } else if (is_begin_with(buf, "ip") == 1) {
+                //判断是否是静态IP信息
+                printf( "静态IP数据：%s\n", buf );
+
+                strtok(buf, "@");
+                p = strtok(NULL, "@");
+
+                if ( p ) {
+                        char shell[50] = "touch /tmp/willen/ip/";
+                        strcat(shell, p);
+                        system("rm -rf /tmp/willen/ip/*");
+                        result = system(shell);
+                        printf("%s:%d\n", shell, result);
+
+                } else {
+                        result = -1;
+                        printf("静态IP配置格式错误\n");
+                }
+
+        } else {
+                //其他数据直接打印
+                printf( "其他数据：%s\n", buf );
+                returnMsg = "invalid";
+        }
+
+        if(returnMsg == NULL) {
+
+                if(result == 0) {
+                        //返回成功结果
+                        returnMsg = "ok";
+                } else {
+                        //返回失败结果
+                        returnMsg = "fail";
+                }
+        }
+
+        return returnMsg;
+}
+
 void *thread2() 
 {
         int                     server_sockfd;      /*服务器端套接字 */
@@ -263,63 +358,41 @@ void *thread2()
                 //标识是否需要继续发送UDP数据
                 needUDPData = 0;
 
-                /*发送心跳数据给客户端并接收客户端的心跳数据--recv返回接收到的字节数，send返回发送的字节数*/
-                while (1)
-                {
-                        /* 循环发送心跳信息 */
-                        if ( send( client_sockfd, "connected\n", 10, 0 ) < 0 ) {
-                                perror( "write error" );
-                                break;
-                        }
+                //消息执行结果
+                char *result = NULL;
+
+                char *p = NULL;
+                char *s = NULL;
+
+                /*接收客户端的(心跳\指令)数据--recv返回接收到的字节数，send返回发送的字节数*/
+                while (1) {
+
+                        // /* 循环发送心跳信息 */
+                        // if ( send( client_sockfd, "connected\n", 10, 0 ) < 0 ) {
+                        //         perror( "write error" );
+                        //         break;
+                        // }
 
                         //循环接收数据
                         if((len = recv( client_sockfd, buf, BUFSIZ, 0 )) <= 0) {
                                 perror( "receive error" );
                                 break;
                         }
-
                         buf[len] = '\0';
 
-                        //判断是否是心跳数据
-                        if (strcmp(buf, "connected") == 0) {
-                                printf( "心跳数据\n" );
+                        printf("接收到数据：%s\n", buf);
 
-                        } else if (is_begin_with(buf, "bluetooth") == 1) {
-                                //判断是否是蓝牙配置信息
-                                strtok(buf, "@");
-                                char *p = strtok(NULL, "@");
-
-                                printf( "蓝牙配置数据：%s\n", p );
-                                char shell[50] = "touch /tmp/willen/bluetooth/";
-                                strcat(shell, p);
-                                system("rm -rf /tmp/willen/bluetooth/*");
-                                printf("%s:%d\n", shell, system(shell));
-
-                        } else if (is_begin_with(buf, "server") == 1) {
-                                //判断是否是服务器接口信息
-                                strtok(buf, "@");
-                                char *p = strtok(NULL, "@");
-
-                                printf( "服务器接口数据：%s\n", p );
-                                char shell[50] = "touch /tmp/willen/server/";
-                                strcat(shell, p);
-                                system("rm -rf /tmp/willen/server/*");
-                                printf("%s:%d\n", shell, system(shell));
-
-                        } else if (is_begin_with(buf, "ip") == 1) {
-                                //判断是否是静态IP信息
-                                strtok(buf, "@");
-                                char *p = strtok(NULL, "@");
-
-                                printf( "静态IP数据：%s\n", p );
-                                char shell[50] = "touch /tmp/willen/ip/";
-                                strcat(shell, p);
-                                system("rm -rf /tmp/willen/ip/*");
-                                printf("%s:%d\n", shell, system(shell));
-
-                        } else {
-                                //其他数据直接打印
-                                printf( "其他数据：%s\n", buf );
+                        s = strdup(buf);
+                        p = strsep(&s, "]");
+                        while( strlen(p) > 0 ) {
+                                printf("处理：%s]\n", p);
+                                result = handleMessage(p);
+                                //发送处理结果
+                                if ( send( client_sockfd, result, strlen(result), 0 ) < 0 ) {
+                                        perror( "write error" );
+                                        break;
+                                }
+                                p = strsep(&s, "]");
                         }
 
                         sleep(3);
@@ -582,7 +655,6 @@ int main()
         /*用默认属性初始化互斥锁*/ 
         pthread_mutex_init(&mut,NULL);
         printf("我是主函数，我正在创建线程\n");
-
         thread_create();
         
         //开启蓝牙功能
